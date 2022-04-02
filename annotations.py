@@ -1,4 +1,4 @@
-from typing import NamedTuple, TypedDict
+from typing import Any, NamedTuple, TypedDict
 
 import numpy as np
 import haiku as hk
@@ -10,11 +10,12 @@ class VqVaeConfig(NamedTuple):
     seed: int
     K: int
     D: int
+    commitment_loss: float
     train_dset_percentage: int
     test_dset_percentage: int
     train_steps: int
     test_steps: int
-    log_every: int
+    test_every: int
     train_batch_size: int
     test_batch_size: int
     learning_rate: float
@@ -25,35 +26,48 @@ class VqVaeConfig(NamedTuple):
 
 class GPTConfig(NamedTuple):
     seed: int
-    dataset: str
     num_heads: int
     hidden_dim: int
     num_layers: int
     dropout_rate: float
     vqvae_config: str
+    train_steps: int
+    test_steps: int
+    log_every: int
+    train_dataset: str
+    test_dataset: str
     train_batch_size: int
     test_batch_size: int
     learning_rate: float
     weight_decay: float
+    logdir: str
+    output_name: str
 
 
-class TrainState(NamedTuple):
+class VqVaeTuple(NamedTuple):
+    encoder: Any
+    decoder: Any
+    quantizer: Any
+
+
+class VqVaeState(NamedTuple):
     params: hk.Params
     state: hk.State
     opt_state: optax.OptState
 
 
-class GPTTrainState(NamedTuple):
+class GPTState(NamedTuple):
     params: hk.Params
     state: hk.State
     opt_state: optax.OptState
     rng: KeyArray
 
 
-class Batch(TypedDict):
+class VqVaeBatch(TypedDict):
     image: np.ndarray
     label: np.ndarray
 
 
 class GPTBatch(TypedDict):
+    label: np.ndarray
     encoding_indices: np.ndarray

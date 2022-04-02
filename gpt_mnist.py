@@ -1,84 +1,84 @@
+from pathlib import Path
+import pickle
 import json
 
 import jax
-import jax.nn as nn
-import jax.numpy as jnp
-import haiku as hk
 import optax
-from datasets.load import load_from_disk
+from tqdm import tqdm
 
-from models.gpt import build_model
-from annotations import GPTConfig, VqVaeConfig, GPTBatch, GPTTrainState
+from dataset import load_vqvae_processed
+from models.gpt import VqVaeGPTModel
+from annotations import GPTConfig, VqVaeConfig
+from logger import get_writer, log_dict
 
+writer = get_writer("runs/gpt")
 config = GPTConfig(
     seed=23,
-    dataset="datasets/exp13-encode",
     num_heads=4,
     hidden_dim=32,
     num_layers=3,
     dropout_rate=0.05,
     vqvae_config="runs/exp13/config.json",
+    train_dataset="datasets/exp13-encode-train",
+    test_dataset="datasets/exp13-encode-test",
+    train_steps=1000,
+    test_steps=1,
+    log_every=500,
     train_batch_size=32,
     test_batch_size=32,
     learning_rate=3e-4,
-    weight_decay=1e-5
+    weight_decay=1e-5,
+    logdir=writer.logdir,
+    output_name="train_state.pkl"
 )
+with open(Path(config.logdir) / "config.json", "w") as f:
+    json.dump(config._asdict(), f, indent=4)
 with open(config.vqvae_config, "r") as f:
     vqvae_config = VqVaeConfig(**json.load(f))
 
-
-mnist_train = load_from_disk(config.dataset)
-
-model = build_model(config.num_heads,
-                    config.hidden_dim,
-                    config.num_layers,
-                    vqvae_config.K,
-                    config.dropout_rate)
-
 key = jax.random.PRNGKey(config.seed)
 
+features, dset_train = load_vqvae_processed(
+    path=config.train_dataset,
+    batch_size=config.train_batch_size,
+    repeat=True,
+    seed=config.seed
+)
 
-def cross_entropy(y, y_pred):
-    return jnp.sum(-y * nn.log_softmax(y_pred), axis=-1)
+_, dset_test = load_vqvae_processed(
+    path=config.test_dataset,
+    batch_size=config.test_batch_size,
+    repeat=True,
+    seed=config.seed
+)
 
+label_classes = features["label"]["num_classes"]
 
-def loss(params: hk.Params, state: hk.State, rng, batch: GPTBatch):
-    tokens = batch["encoding_indices"]
-    tokens = tokens.reshape((tokens.shape[0], -1))
-    y_pred, new_state = model.apply(
-        params, state, rng, tokens, is_training=True)
-    loss = jnp.mean(cross_entropy(tokens[:, 1:], y_pred[:, :-1]))
-    return loss, new_state
-
-
-loss_and_grad = jax.value_and_grad(loss, has_aux=True)
 optimizer = optax.adamw(config.learning_rate, weight_decay=config.weight_decay)
+model = VqVaeGPTModel(label_classes,
+                      vqvae_config,
+                      config.num_heads,
+                      config.hidden_dim,
+                      config.num_layers,
+                      config.dropout_rate,
+                      optimizer)
+train_state = model.initial_state(key, next(dset_train)[1])
 
 
-@jax.jit
-def step(train_state: GPTTrainState, batch: GPTBatch) -> tuple[GPTTrainState, jnp.ndarray]:
-    rng, _rng = jax.random.split(train_state.rng)
-    (loss_value, state), grads = loss_and_grad(train_state.params,
-                                               train_state.state,
-                                               _rng,
-                                               batch)
-    updates, opt_state = optimizer.update(grads,
-                                          train_state.opt_state,
-                                          train_state.params)
-    params = optax.apply_updates(train_state.params, updates)
+for i in tqdm(range(config.train_steps)):
+    epoch, batch = next(dset_train)
+    train_state, logs = model.update(train_state, batch)
 
-    train_state = GPTTrainState(params, state, opt_state, rng)
-    return train_state, loss_value
+    writer.add_scalar("train/epoch", epoch, i)
+    log_dict(writer, logs, step=i, prefix="train/")
 
+    if (i + 1) % config.log_every == 0:
+        for _ in range(config.test_steps):
+            _, batch = next(dset_test)
+            logs = model.evaluate(train_state, batch)
+            log_dict(writer, logs, step=i, prefix="test/")
 
-@jax.jit
-def eval_step(train_state: GPTTrainState, batch: GPTBatch) -> tuple[GPTTrainState, jnp.ndarray]:
-    rng, _rng = jax.random.split(train_state.rng)
-    loss_val, state = loss(train_state.params, train_state.state, _rng, batch)
-    train_state = GPTTrainState(
-        train_state.params,
-        state,
-        train_state.opt_state,
-        rng
-    )
-    return train_state, loss_val
+with open(Path(config.logdir) / config.output_name, "wb") as f:
+    pickle.dump(train_state, f)
+
+writer.close()

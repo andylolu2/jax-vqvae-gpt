@@ -1,11 +1,15 @@
-from typing import Optional
+from typing import Any, Callable, NamedTuple, Optional
+import functools
 
 import haiku as hk
 import jax
 import jax.nn as nn
 import jax.numpy as jnp
+import optax
+from optax._src.base import GradientTransformation
 
-from annotations import Batch
+from annotations import VqVaeBatch, VqVaeState
+from losses import mse
 
 
 class ResBlock(hk.Module):
@@ -28,7 +32,10 @@ class ResBlock(hk.Module):
 
 
 class CnnEncoder(hk.Module):
-    def __init__(self, out_channels: int, kernel_size: int = 3, name: Optional[str] = None):
+    def __init__(self,
+                 out_channels: int,
+                 kernel_size: int = 3,
+                 name: Optional[str] = None):
         super().__init__(name)
         self.conv1 = hk.Conv2D(out_channels // 2, kernel_size, stride=2)
         self.batchnorm1 = hk.BatchNorm(True, True, 0.9)
@@ -83,21 +90,21 @@ class QuantizedCodebook(hk.Module):
         self.codebook = hk.get_parameter(
             "codebook", (self.K, self.D), init=initializer)
 
-    def __call__(self, inputs):
+    def __call__(self, inputs) -> dict[str, jnp.ndarray]:
         '''Connects the module to some inputs.
 
         Args:
-        inputs: Tensor, final dimension must be equal to ``embedding_dim``. All
-            other leading dimensions will be flattened and treated as a large batch.
-        is_training: boolean, whether this connection is to training data.
+            inputs: Tensor, final dimension must be equal to ``embedding_dim``. All
+                other leading dimensions will be flattened and treated as a large batch.
+            is_training: boolean, whether this connection is to training data.
 
         Returns:
-        dict: Dictionary containing the following keys and values:
-            * ``quantize``: Tensor containing the quantized version of the input.
-            * ``loss``: Tensor containing the loss to optimize.
-            * ``encoding_indices``: Tensor containing the discrete encoding indices,
-            ie which element of the quantized space each input element was mapped
-            to.
+            dict: Dictionary containing the following keys and values:
+                * ``quantize``: Tensor containing the quantized version of the input.
+                * ``loss``: Tensor containing the loss to optimize.
+                * ``encoding_indices``: Tensor containing the discrete encoding indices,
+                ie which element of the quantized space each input element was mapped
+                to.
         '''
         # input shape A1 x ... x An x D
         # shape N x D, N = A1 * ... * An
@@ -134,37 +141,118 @@ class QuantizedCodebook(hk.Module):
             "encoding_indices": encoding_indices,
         }
 
+    def embed(self, indices):
+        return self.codebook[indices]
 
-class VqVae(hk.Module):
+
+class VqVaeApply(NamedTuple):
+    encode: Callable[..., Any]
+    decode: Callable[..., Any]
+    quantize: Callable[..., Any]
+    embed: Callable[..., Any]
+
+
+class VqVaeModel:
     def __init__(self,
                  embed_size_K: int,
                  embed_dim_D: int,
-                 commitment_loss: float = 0.25,
-                 name: Optional[str] = None):
-        super().__init__(name)
+                 commitment_loss: float,
+                 optimizer: Optional[GradientTransformation]):
         self.K = embed_size_K
         self.D = embed_dim_D
-        self.encoder = CnnEncoder(self.D)
-        self.decoder = CnnDencoder(self.D)
 
-        self.codebook = QuantizedCodebook(self.K, self.D, commitment_loss)
+        transformed = self.build(self.K, self.D, commitment_loss)
+        self.init = transformed.init
+        self.apply = VqVaeApply(*transformed.apply)
 
-    def __call__(self, x, is_training: bool):
-        encodings = self.encoder(x, is_training)
+        self.optimizer = optimizer
 
-        result = self.codebook(encodings)
-        reconstruction = self.decoder(result["quantize"], is_training)
+    @staticmethod
+    def build(K: int, D: int, commitment_loss: float):
+        def f():
+            encoder = CnnEncoder(D, name="encoder")
+            decoder = CnnDencoder(D, name="decoder")
+            quantizer = QuantizedCodebook(
+                K, D, commitment_loss, name="quantizer"
+            )
 
-        result["reconstruction"] = reconstruction
+            def encode(x, is_training: bool):
+                return encoder(x, is_training)
 
-        return result
+            def decode(x, is_training: bool):
+                return decoder(x, is_training)
 
+            def quantize(x):
+                return quantizer(x)
 
-def build_model(K: int, D: int):
-    @hk.without_apply_rng
-    @hk.transform_with_state
-    def model(batch: Batch, is_training: bool):
+            def embed(x):
+                return quantizer.embed(x)
+
+            def init(x, is_training: bool):
+                encodings = encode(x, is_training)
+                result = quantize(encodings)
+                x_pred = decode(result["quantize"], is_training)
+                z_q = embed(result["encoding_indices"])
+                return x_pred, z_q
+
+            return init, (encode, decode, quantize, embed)
+        return hk.multi_transform_with_state(f)
+
+    def initial_state(self, rng, batch: VqVaeBatch) -> VqVaeState:
+        params, state = self.init(rng, batch["image"], is_training=True)
+        opt_state = self.optimizer.init(params)
+        return VqVaeState(params, state, opt_state)
+
+    def forward(self, params: hk.Params, state: hk.State, x, is_training: bool):
+        z_e, state = self.apply.encode(params, state, None, x, is_training)
+        result, state = self.apply.quantize(params, state, None, z_e)
+        z_q = result["quantize"]
+        x_pred, state = self.apply.decode(
+            params, state, None, z_q, is_training)
+        result["x_pred"] = x_pred
+        return result, state
+
+    def loss(self, params: hk.Params, state: hk.State, batch: VqVaeBatch, is_training: bool):
         x = batch["image"]
-        net = VqVae(K, D)
-        return net(x, is_training)
-    return model
+        result, state = self.forward(params, state, x, is_training)
+        reconstruct_loss = mse(x, result["x_pred"])
+        loss = reconstruct_loss + result["codebook_loss"]
+        return loss, (state, result)
+
+    @functools.partial(jax.jit, static_argnums=0)
+    def update(self, vqvae_state: VqVaeState, batch: VqVaeBatch
+               ) -> tuple[VqVaeState, dict[str, Any]]:
+        assert self.optimizer is not None
+
+        loss_and_grad = jax.value_and_grad(self.loss, has_aux=True)
+        (loss, (state, _)), grads = loss_and_grad(
+            vqvae_state.params, vqvae_state.state, batch, True
+        )
+        updates, opt_state = self.optimizer.update(grads,
+                                                   vqvae_state.opt_state,
+                                                   vqvae_state.params)
+        params = optax.apply_updates(vqvae_state.params, updates)
+        new_vqvae_state = VqVaeState(params, state, opt_state)
+        logs = {
+            "scalar_loss": jax.device_get(loss)
+        }
+        return new_vqvae_state, logs
+
+    @functools.partial(jax.jit, static_argnums=0)
+    def evaluate(self, vqvae_state: VqVaeState, batch: VqVaeBatch) -> dict[str, Any]:
+        loss, (_, result) = self.loss(vqvae_state.params,
+                                      vqvae_state.state,
+                                      batch,
+                                      is_training=False)
+        logs = {
+            "scalar_loss": jax.device_get(loss),
+            "images_original": batch["image"],
+            "images_reconstruction": result["x_pred"]
+        }
+        return logs
+
+    def lookup_indices(self, vqvae_state: VqVaeState, indices) -> jnp.ndarray:
+        z_q, _ = self.apply.embed(
+            vqvae_state.params, vqvae_state.state, None, indices
+        )
+        return z_q

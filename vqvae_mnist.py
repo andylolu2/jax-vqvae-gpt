@@ -3,27 +3,26 @@ import pickle
 import json
 
 from tqdm import tqdm
-import haiku as hk
 import jax
-import jax.numpy as jnp
 import optax
 
-from dataset import load_mnist, Batch
-from models.vqvae import build_model
-from logger import get_writer
-from annotations import VqVaeConfig, TrainState, Batch
+from dataset import load_mnist
+from models.vqvae import VqVaeModel
+from logger import get_writer, log_dict
+from annotations import VqVaeConfig
 
 
-writer = get_writer()
+writer = get_writer("runs/vqvae")
 config = VqVaeConfig(
     seed=23,
     K=128,
     D=64,
+    commitment_loss=0.25,
     train_dset_percentage=100,
     test_dset_percentage=100,
     train_steps=10000,
     test_steps=1,
-    log_every=200,
+    test_every=200,
     train_batch_size=32,
     test_batch_size=32,
     learning_rate=3e-4,
@@ -36,85 +35,34 @@ with open(Path(config.logdir) / "config.json", "w") as f:
 
 key = jax.random.PRNGKey(config.seed)
 
-model = build_model(config.K, config.D)
+_, dset_train = load_mnist(split="train",
+                           batch_size=config.train_batch_size,
+                           percentage=config.train_dset_percentage,
+                           seed=config.seed)
+_, dset_test = load_mnist(split="test",
+                          batch_size=config.test_batch_size,
+                          percentage=config.test_dset_percentage,
+                          seed=config.seed)
 
-
-def mse(x, x_pred):
-    return jnp.mean((x - x_pred) ** 2)
-
-
-def loss(params: hk.Params, state: hk.State, batch: Batch, is_training: bool):
-    result, new_state = model.apply(params, state, batch, is_training)
-    reconstruction_loss = mse(batch["image"], result["reconstruction"])
-    loss = reconstruction_loss + result["codebook_loss"]
-    return loss, (new_state, result)
-
-
-loss_and_grad = jax.value_and_grad(loss, has_aux=True)
 optimizer = optax.adamw(config.learning_rate, weight_decay=config.weight_decay)
-
-mnist_train = load_mnist("train",
-                         config.train_batch_size,
-                         percentage=config.train_dset_percentage,
-                         seed=config.seed)
-mnist_test = load_mnist("test",
-                        config.test_batch_size,
-                        percentage=config.test_dset_percentage,
-                        seed=config.seed)
-
-
-@jax.jit
-def step(train_state: TrainState, batch: Batch) -> tuple[TrainState, jnp.ndarray, dict]:
-    (loss_val, (state, result)), grads = loss_and_grad(train_state.params,
-                                                       train_state.state,
-                                                       batch,
-                                                       True)
-    updates, opt_state = optimizer.update(grads,
-                                          train_state.opt_state,
-                                          train_state.params)
-    params = optax.apply_updates(train_state.params, updates)
-    train_state = TrainState(params, state, opt_state)
-    return train_state, loss_val, result
-
-
-@jax.jit
-def eval_step(train_state: TrainState, batch: Batch) -> tuple[TrainState, jnp.ndarray, dict]:
-    loss_val, (state, result) = loss(train_state.params,
-                                     train_state.state,
-                                     batch,
-                                     False)
-    train_state = TrainState(train_state.params, state, train_state.opt_state)
-    return train_state, loss_val, result
-
-
-key, key1 = jax.random.split(key)
-_, sample_batch = next(mnist_train)
-params, state = model.init(key1, sample_batch, is_training=True)
-opt_state = optimizer.init(params)
-
-train_state = TrainState(params, state, opt_state)
-print("Initialized model!")
+model = VqVaeModel(config.K, config.D, config.commitment_loss, optimizer)
+vqvae_state = model.initial_state(key, next(dset_train)[1])
 
 
 for i in tqdm(range(config.train_steps)):
-    epoch, batch = next(mnist_train)
-    train_state, loss_val, _ = step(train_state, batch)
+    epoch, batch = next(dset_train)
+    vqvae_state, logs = model.update(vqvae_state, batch)
 
-    writer.add_scalar("train/loss", jax.device_get(loss_val), i)
     writer.add_scalar("train/epoch", epoch, i)
+    log_dict(writer, logs, step=i, prefix="train/")
 
-    if i % config.log_every == 0:
+    if (i + 1) % config.test_every == 0:
         for _ in range(config.test_steps):
-            _, batch = next(mnist_test)
-            train_state, loss_val, result = eval_step(train_state, batch)
-
-            writer.add_scalar("test/loss", jax.device_get(loss_val), i)
-            writer.add_images(
-                "test/original", batch["image"], i, dataformats="NHWC")
-            writer.add_images("test/reconstruction",
-                              result["reconstruction"], i, dataformats="NHWC")
+            _, batch = next(dset_test)
+            logs = model.evaluate(vqvae_state, batch)
+            log_dict(writer, logs, step=i, prefix="test/")
 
 with open(Path(config.logdir) / config.output_name, "wb") as f:
-    pickle.dump(train_state, f)
+    pickle.dump(vqvae_state, f)
 
 writer.close()

@@ -5,15 +5,15 @@ from PIL import Image
 
 import numpy as np
 
-from models import build_model
+from models.vqvae import build_model
 from dataset import load_mnist
-from annotations import VqVaeConfig, TrainState, Batch
+from annotations import VqVaeConfig, VqVaeState, VqVaeBatch
 
 logdir = Path("runs/exp13")
 with open(logdir / "config.json", "r") as f:
     config = VqVaeConfig(**json.load(f))
 with open(logdir / config.output_name, "rb") as f:
-    train_state: TrainState = pickle.load(f)
+    train_state: VqVaeState = pickle.load(f)
 
 model = build_model(config.K, config.D)
 
@@ -21,7 +21,7 @@ mnist_train = load_mnist("train", 1, 100, seed=0)
 _, sample = next(mnist_train)
 
 
-def infer(train_state: TrainState, sample: Batch):
+def infer(train_state: VqVaeState, sample: VqVaeBatch):
     params = train_state.params
     state = train_state.state
     result, _ = model.apply(params, state, sample, is_training=False)
