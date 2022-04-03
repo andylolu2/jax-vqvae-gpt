@@ -33,7 +33,7 @@ class GPTConfig(NamedTuple):
     vqvae_config: str
     train_steps: int
     test_steps: int
-    log_every: int
+    test_every: int
     train_dataset: str
     test_dataset: str
     train_batch_size: int

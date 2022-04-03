@@ -19,6 +19,8 @@ class CasualSelfAttention(hk.MultiHeadAttention):
         # jnp.tril([[1,1,1],[1,1,1],[1,1,1]])
         # = [[1,0,0],[1,1,0],[1,1,1]]
         casual_mask = jnp.tril(jnp.ones((seq_len, seq_len)))
+        # mask shape is B x num_heads x N x N
+        casual_mask = jnp.tile(casual_mask, (x.shape[0], self.num_heads, 1, 1))
         return super().__call__(x, x, x, casual_mask)
 
 
@@ -26,13 +28,15 @@ class DecoderBlock(hk.Module):
     def __init__(self,
                  num_heads: int,
                  hidden_dim: int,
+                 model_size: int,
                  weight_init_scale: float,
                  dropout_rate: float,
                  name: Optional[str] = None):
         super().__init__(name)
         self.casual_atten = CasualSelfAttention(num_heads,
                                                 hidden_dim,
-                                                weight_init_scale)
+                                                weight_init_scale,
+                                                model_size)
         self.dropout_rate = dropout_rate
 
     def __call__(self, x: jnp.ndarray, is_training: bool) -> jnp.ndarray:
@@ -40,13 +44,16 @@ class DecoderBlock(hk.Module):
         if is_training:
             res = hk.dropout(hk.next_rng_key(), self.dropout_rate, res)
         x += res
-        x = hk.BatchNorm(True, True, 0.9)(x, is_training)
+        x = hk.LayerNorm(-1, True, True)(x)
+        # x = hk.BatchNorm(True, True, 0.9)(x, is_training)
 
         dim = x.shape[-1]
-        res = hk.Linear(dim)(x)
-        res = nn.relu(res)
+        res = hk.Linear(dim * 4)(x)
+        res = nn.gelu(res)
+        res = hk.Linear(dim)(res)
         x += res
-        x = hk.BatchNorm(True, True, 0.9)(x, is_training)
+        x = hk.LayerNorm(-1, True, True)(x)
+        # x = hk.BatchNorm(True, True, 0.9)(x, is_training)
         return x
 
 
@@ -59,20 +66,35 @@ class GPTLmHeadModel(hk.Module):
                  dropout_rate: float,
                  name: Optional[str] = None):
         super().__init__(name)
-        init_scale = 2. / num_layers
+        self.num_heads = num_heads
+        self.hidden_dim = hidden_dim
+        self.num_layers = num_layers
+        self.num_classes = num_classes
+        self.dropout_rate = dropout_rate
+        self.model_size = self.num_heads * self.hidden_dim
 
-        self.embed = hk.Embed(num_classes, hidden_dim)
+        self.init_scale = 2. / num_layers
+        self.embed = hk.Embed(num_classes, self.model_size)
         self.blocks = [
-            DecoderBlock(num_heads, hidden_dim, init_scale, dropout_rate)
+            DecoderBlock(self.num_heads,
+                         self.hidden_dim,
+                         self.model_size,
+                         self.init_scale,
+                         self.dropout_rate)
             for _ in range(num_layers)]
         self.lm_head = hk.Linear(num_classes)
 
     def __call__(self, x, is_training: bool):
-        x = self.embed(x)
+        embed_init = hk.initializers.TruncatedNormal(stddev=0.02)
+        seq_length = x.shape[1]
+        self.positional_embeddings = hk.get_parameter(
+            'pos_embs', [seq_length, self.model_size], init=embed_init
+        )
+
+        x = self.embed(x) + self.positional_embeddings
         for block in self.blocks:
             x = block(x, is_training)
         x = self.lm_head(x)
-        x = nn.softmax(x, axis=-1)
         return x
 
 

@@ -7,7 +7,7 @@ from tensorboardX import SummaryWriter
 prefix = "exp"
 
 
-def get_writer(base_dir: str) -> SummaryWriter:
+def get_writer(base_dir: str, disable: bool = False) -> SummaryWriter:
     logdir = Path(base_dir)
     logdir.mkdir(parents=True, exist_ok=True)
     max_run = -1
@@ -15,7 +15,8 @@ def get_writer(base_dir: str) -> SummaryWriter:
         match = re.fullmatch(rf"{prefix}([0-9]+)", path.name)
         max_run = max(max_run, int(match.group(1)))
     return SummaryWriter(logdir=str(logdir / f"{prefix}{max_run+1}"),
-                         flush_secs=10)
+                         flush_secs=10,
+                         write_to_disk=not disable)
 
 
 def log_dict(writer: SummaryWriter,
