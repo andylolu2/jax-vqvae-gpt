@@ -34,43 +34,62 @@ class ResBlock(hk.Module):
 class CnnEncoder(hk.Module):
     def __init__(self,
                  out_channels: int,
+                 downscale_level: int,
+                 res_layers: int = 1,
                  kernel_size: int = 3,
                  name: Optional[str] = None):
         super().__init__(name)
-        self.conv1 = hk.Conv2D(out_channels // 2, kernel_size, stride=2)
-        self.batchnorm1 = hk.BatchNorm(True, True, 0.9)
-        self.conv2 = hk.Conv2D(out_channels, kernel_size, stride=2)
-        self.batchnorm2 = hk.BatchNorm(True, True, 0.9)
-        self.res = ResBlock(out_channels, kernel_size)
+        self.downscale_layers = []
+        for i in range(downscale_level - 1, -1, -1):
+            num_channels = out_channels // (2**i)
+            self.downscale_layers.append((
+                hk.Conv2D(num_channels, kernel_size, stride=2),
+                hk.BatchNorm(True, True, 0.9)
+            ))
+        self.res_layers = [
+            ResBlock(out_channels, kernel_size) for _ in range(res_layers)
+        ]
 
     def __call__(self, x, is_training: bool) -> jnp.ndarray:
-        x = self.conv1(x)
-        x = self.batchnorm1(x, is_training)
-        x = nn.relu(x)
-        x = self.conv2(x)
-        x = self.batchnorm2(x, is_training)
-        x = nn.relu(x)
-        x = self.res(x, is_training)
+        for conv, bn in self.downscale_layers:
+            x = conv(x)
+            x = bn(x, is_training)
+            x = nn.relu(x)
+        for res in self.res_layers:
+            x = res(x, is_training)
         return x
 
 
-class CnnDencoder(hk.Module):
-    def __init__(self, in_channels: int, kernel_size: int = 3, name: Optional[str] = None):
+class CnnDecoder(hk.Module):
+    def __init__(self,
+                 in_channels: int,
+                 upscale_level: int,
+                 res_layers: int = 1,
+                 kernel_size: int = 3,
+                 name: Optional[str] = None):
         super().__init__(name)
-        self.res = ResBlock(in_channels, kernel_size)
-        self.deconv1 = hk.Conv2DTranspose(
-            in_channels // 2, kernel_size, stride=2)
-        self.batchnorm1 = hk.BatchNorm(True, True, 0.9)
-        self.deconv2 = hk.Conv2DTranspose(1, kernel_size, stride=2)
-        self.batchnorm2 = hk.BatchNorm(True, True, 0.9)
+        self.res_layers = [
+            ResBlock(in_channels, kernel_size) for _ in range(res_layers)
+        ]
+        self.upscale_layers = []
+        for i in range(upscale_level - 1):
+            num_channels = in_channels // (2**i)
+            self.upscale_layers.append((
+                hk.Conv2DTranspose(num_channels, kernel_size, stride=2),
+                hk.BatchNorm(True, True, 0.9)
+            ))
+        self.out = hk.Conv2DTranspose(1, kernel_size, stride=2)
+        self.bn_out = hk.BatchNorm(True, True, 0.9)
 
     def __call__(self, x: jnp.ndarray, is_training: bool) -> jnp.ndarray:
-        x = self.res(x, is_training)
-        x = self.deconv1(x)
-        x = self.batchnorm1(x, is_training)
-        x = nn.relu(x)
-        x = self.deconv2(x)
-        x = self.batchnorm2(x, is_training)
+        for res in self.res_layers:
+            x = res(x, is_training)
+        for deconv, bn in self.upscale_layers:
+            x = deconv(x)
+            x = bn(x, is_training)
+            x = nn.relu(x)
+        x = self.out(x)
+        x = self.bn_out(x, is_training)
         x = nn.sigmoid(x)
         return x
 
@@ -156,22 +175,40 @@ class VqVaeModel:
     def __init__(self,
                  embed_size_K: int,
                  embed_dim_D: int,
+                 compression_level: int,
+                 res_layers: int,
                  commitment_loss: float,
                  optimizer: Optional[GradientTransformation]):
         self.K = embed_size_K
         self.D = embed_dim_D
+        self.compression_level = compression_level
+        self.res_layers = res_layers
 
-        transformed = self.build(self.K, self.D, commitment_loss)
+        transformed = self.build(self.K,
+                                 self.D,
+                                 self.compression_level,
+                                 self.res_layers,
+                                 commitment_loss)
         self.init = transformed.init
         self.apply = VqVaeApply(*transformed.apply)
 
         self.optimizer = optimizer
 
     @staticmethod
-    def build(K: int, D: int, commitment_loss: float):
+    def build(K: int,
+              D: int,
+              compression_level: int,
+              res_layers: int,
+              commitment_loss: float):
         def f():
-            encoder = CnnEncoder(D, name="encoder")
-            decoder = CnnDencoder(D, name="decoder")
+            encoder = CnnEncoder(out_channels=D,
+                                 downscale_level=compression_level,
+                                 res_layers=res_layers,
+                                 name="encoder")
+            decoder = CnnDecoder(in_channels=D,
+                                 upscale_level=compression_level,
+                                 res_layers=res_layers,
+                                 name="decoder")
             quantizer = QuantizedCodebook(
                 K, D, commitment_loss, name="quantizer"
             )

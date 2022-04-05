@@ -5,14 +5,13 @@ import json
 import datasets
 from datasets.arrow_dataset import Dataset
 import jax
-import jax.numpy as jnp
 import numpy as np
 
 from models.vqvae import VqVaeModel
 from annotations import VqVaeConfig, VqVaeState
 
 base_logdir = Path("runs/vqvae")
-exp = "exp0"
+exp = "exp1"
 
 logdir = base_logdir / exp
 
@@ -21,7 +20,8 @@ with open(logdir / "config.json", "r") as f:
 with open(logdir / config.output_name, "rb") as f:
     vqvae_state: VqVaeState = pickle.load(f)
 
-model = VqVaeModel(config.K, config.D, config.commitment_loss, None)
+model = VqVaeModel(config.K, config.D, config.compression_level,
+                   config.res_layers, config.commitment_loss, None)
 
 
 @jax.jit

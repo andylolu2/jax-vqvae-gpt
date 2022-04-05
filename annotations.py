@@ -10,6 +10,8 @@ class VqVaeConfig(NamedTuple):
     seed: int
     K: int
     D: int
+    compression_level: int
+    res_layers: int
     commitment_loss: float
     train_dset_percentage: int
     test_dset_percentage: int
@@ -31,6 +33,7 @@ class GPTConfig(NamedTuple):
     num_layers: int
     dropout_rate: float
     vqvae_config: str
+    vqvae_state: str
     train_steps: int
     test_steps: int
     test_every: int

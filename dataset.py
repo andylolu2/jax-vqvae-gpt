@@ -6,6 +6,7 @@ from datasets.features.features import Features
 import numpy as np
 import datasets
 from datasets.arrow_dataset import Dataset
+from skimage.transform import resize
 
 from annotations import VqVaeBatch, GPTBatch
 
@@ -21,8 +22,10 @@ def load_mnist(split: str,
     features: Features = dset.features
 
     def preprocess(batch) -> VqVaeBatch:
-        images = [np.array(img, dtype=np.float32) /
-                  255 for img in batch["image"]]
+        images = []
+        for img in batch["image"]:
+            arr = np.array(img, dtype=np.float32) / 255
+            images.append(resize(arr, (32, 32)))
         images = np.array(images)[..., None]
         return {
             "image": images,

@@ -1,6 +1,7 @@
 from pathlib import Path
 import pickle
 import json
+from collections import defaultdict
 
 from tqdm import tqdm
 import jax
@@ -15,16 +16,18 @@ from annotations import VqVaeConfig
 writer = get_writer("runs/vqvae")
 config = VqVaeConfig(
     seed=23,
-    K=128,
-    D=64,
+    K=64,
+    D=256,
+    compression_level=3,
+    res_layers=1,
     commitment_loss=0.25,
     train_dset_percentage=100,
     test_dset_percentage=100,
     train_steps=10000,
-    test_steps=1,
+    test_steps=20,
     test_every=200,
-    train_batch_size=32,
-    test_batch_size=32,
+    train_batch_size=64,
+    test_batch_size=64,
     learning_rate=3e-4,
     weight_decay=1e-5,
     logdir=writer.logdir,
@@ -45,7 +48,12 @@ _, dset_test = load_mnist(split="test",
                           seed=config.seed)
 
 optimizer = optax.adamw(config.learning_rate, weight_decay=config.weight_decay)
-model = VqVaeModel(config.K, config.D, config.commitment_loss, optimizer)
+model = VqVaeModel(config.K,
+                   config.D,
+                   config.compression_level,
+                   config.res_layers,
+                   config.commitment_loss,
+                   optimizer)
 vqvae_state = model.initial_state(key, next(dset_train)[1])
 
 
@@ -57,10 +65,13 @@ for i in tqdm(range(config.train_steps)):
     log_dict(writer, logs, step=i, prefix="train/")
 
     if (i + 1) % config.test_every == 0:
+        logs = defaultdict(list)
         for _ in range(config.test_steps):
             _, batch = next(dset_test)
-            logs = model.evaluate(vqvae_state, batch)
-            log_dict(writer, logs, step=i, prefix="test/")
+            log = model.evaluate(vqvae_state, batch)
+            for k, v in log.items():
+                logs[k].append(v)
+        log_dict(writer, logs, step=i, prefix="test/")
 
 with open(Path(config.logdir) / config.output_name, "wb") as f:
     pickle.dump(vqvae_state, f)

@@ -24,10 +24,15 @@ def log_dict(writer: SummaryWriter,
              step: int,
              prefix: str = ""):
     for k, v in logs.items():
-        assert isinstance(k, str)
         if k.startswith("scalar_"):
             k = k[len("scalar_"):]
-            writer.add_scalar(f"{prefix}{k}", v, step)
+            value = v
+            if isinstance(value, list):
+                value = sum(value) / len(value)
+            writer.add_scalar(f"{prefix}{k}", value, step)
         elif k.startswith("images_"):
             k = k[len("images_"):]
-            writer.add_images(f"{prefix}{k}", v, step, dataformats="NHWC")
+            value = v
+            if isinstance(value, list):
+                value = value[0]
+            writer.add_images(f"{prefix}{k}", value, step, dataformats="NHWC")
