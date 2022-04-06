@@ -1,0 +1,19 @@
+{
+    "seed": 23,
+    "K": 128,
+    "D": 128,
+    "compression_level": 3,
+    "res_layers": 2,
+    "commitment_loss": 0.25,
+    "train_dset_percentage": 100,
+    "test_dset_percentage": 100,
+    "train_steps": 10000,
+    "test_steps": 20,
+    "test_every": 200,
+    "train_batch_size": 64,
+    "test_batch_size": 64,
+    "learning_rate": 3e-4,
+    "weight_decay": 1e-5,
+    "logdir": "runs/vqvae",
+    "output_name": "train_state.pkl"
+}

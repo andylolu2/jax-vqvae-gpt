@@ -11,6 +11,13 @@ from skimage.transform import resize
 from annotations import VqVaeBatch, GPTBatch
 
 
+def process_image(img) -> np.ndarray:
+    img = np.array(img, dtype=np.float32) / 255
+    img = resize(img, (32, 32))
+    img = img[..., None]
+    return img
+
+
 def load_mnist(split: str,
                batch_size: int,
                percentage: int,
@@ -22,13 +29,8 @@ def load_mnist(split: str,
     features: Features = dset.features
 
     def preprocess(batch) -> VqVaeBatch:
-        images = []
-        for img in batch["image"]:
-            arr = np.array(img, dtype=np.float32) / 255
-            images.append(resize(arr, (32, 32)))
-        images = np.array(images)[..., None]
         return {
-            "image": images,
+            "image": np.array([process_image(img) for img in batch["image"]]),
             "label": np.array(batch["label"])
         }
     dset.set_transform(preprocess)

@@ -41,6 +41,8 @@ class GPTConfig(NamedTuple):
     test_dataset: str
     train_batch_size: int
     test_batch_size: int
+    generate_samples: int
+    sample_temperature: float
     learning_rate: float
     weight_decay: float
     logdir: str

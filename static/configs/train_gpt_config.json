@@ -1,0 +1,22 @@
+{
+    "seed": 23,
+    "num_heads": 4,
+    "hidden_dim": 64,
+    "num_layers": 4,
+    "dropout_rate": 0.1,
+    "vqvae_config": "runs/vqvae/exp9/config.json",
+    "vqvae_state": "runs/vqvae/exp9/train_state.pkl",
+    "train_steps": 15000,
+    "test_steps": 20,
+    "test_every": 250,
+    "train_dataset": "datasets/exp9-encoded/train",
+    "test_dataset": "datasets/exp9-encoded/test",
+    "train_batch_size": 64,
+    "test_batch_size": 64,
+    "generate_samples": 16,
+    "sample_temperature": 0.3,
+    "learning_rate": 3e-4,
+    "weight_decay": 1e-5,
+    "logdir": "runs/gpt",
+    "output_name": "train_state.pkl"
+}

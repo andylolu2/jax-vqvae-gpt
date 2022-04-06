@@ -1,5 +1,11 @@
-runs
-datasets
-
 __pycache__
 .python-version
+
+# train configs
+/train_vqvae_config.json
+/train_gpt_config.json
+
+# training outputs
+runs
+datasets
+generated
