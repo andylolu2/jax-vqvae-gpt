@@ -12,7 +12,7 @@ Instead of using a PixelCNN to sample from the latent space like the
 [original paper](https://arxiv.org/pdf/1711.00937.pdf), this 
 implementation uses a GPT-style, decoder-only transformer to generate samples.
 
-## :star2: Results
+## :star2: Generated samples
 
 <div align="center">
 
@@ -63,7 +63,7 @@ cp static/configs/train_vqvae_config.json train_vqvae_config.json
 
 Optionally, you can change the training parameters. 
 
-> Since this file is likely to be changed, 
+> Since this file is likely to be changed while experimenting, 
 > `/train_vqvae_config.json` is included in the [`.gitignore`](.gitignore).
 
 ### Step 3: Train VQ-VAE!
@@ -101,7 +101,7 @@ cp static/configs/train_gpt_config.json train_gpt_config.json
 
 Optionally, you can change the training parameters. 
 
-> Since this file is likely to be changed, 
+> Since this file is likely to be changed while experimenting, 
 > `/train_gpt_config.json` is included in the [`.gitignore`](.gitignore).
 
 ### Step 6: Train the GPT!
