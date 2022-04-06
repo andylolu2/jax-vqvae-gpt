@@ -5,7 +5,7 @@
 </div>
 
 This is an implementation of VQ-VAE with a GPT-style sampler 
-on the [JAX](https://github.com/google/jax) and 
+in the [JAX](https://github.com/google/jax) and 
 [Haiku](https://github.com/deepmind/dm-haiku) ecosystem.
 
 Instead of using a PixelCNN to sample from the latent space like the
