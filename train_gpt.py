@@ -1,3 +1,4 @@
+from typing import Optional
 from pathlib import Path
 import pickle
 import json
@@ -12,7 +13,7 @@ import numpy as np
 from trainers.gpt_trainer import VqVaeGPTTrainer
 from trainers.vqvae_trainer import VqVaeTrainer
 from utils.dataset import load_vqvae_processed
-from utils.annotations import GPTConfig, VqVaeConfig, VqVaeState
+from utils.annotations import GPTConfig, GPTState, VqVaeConfig, VqVaeState
 from utils.logger import get_writer, log_dict
 
 
@@ -21,10 +22,12 @@ def parse_args():
         description="Train a GPT-style transformer the VQ-VAE tokens of the MNIST dataset.")
     parser.add_argument("-f", "--file", type=str, required=True,
                         help="path to the json config file.")
+    parser.add_argument("-chkp", "--checkpoint", type=str,
+                        help="path to train state pkl file.")
     return parser.parse_args()
 
 
-def main(config: GPTConfig):
+def main(config: GPTConfig, checkpoint: Optional[str] = None):
     writer = get_writer(config.logdir)
     exp_dir = writer.logdir
 
@@ -72,25 +75,33 @@ def main(config: GPTConfig):
 
     # initialize model
     _, sample = next(dset_train)
-    optimizer = optax.adamw(config.learning_rate,
-                            weight_decay=config.weight_decay)
-    model = VqVaeGPTTrainer(label_classes,
-                            vqvae_config,
-                            config.num_heads,
-                            config.hidden_dim,
-                            config.num_layers,
-                            config.dropout_rate,
-                            sample,
-                            optimizer)
+    optimizer = optax.adamw(
+        config.learning_rate,
+        weight_decay=config.weight_decay
+    )
+    trainer = VqVaeGPTTrainer(
+        label_classes,
+        vqvae_config,
+        config.num_heads,
+        config.hidden_dim,
+        config.num_layers,
+        config.dropout_rate,
+        sample,
+        optimizer
+    )
     key = jax.random.PRNGKey(config.seed)
-    key, rng = jax.random.split(key)
-    train_state = model.initial_state(key, sample)
+    if checkpoint is None:
+        key, key1 = jax.random.split(key)
+        train_state = trainer.initial_state(key1, sample)
+    else:
+        with open(checkpoint, "rb") as f:
+            train_state: GPTState = pickle.load(f)
 
     # training loop
     for i in tqdm(range(config.train_steps)):
         # update
         epoch, batch = next(dset_train)
-        train_state, logs = model.update(train_state, batch)
+        train_state, logs = trainer.update(train_state, batch)
 
         # log
         logs["scalar_epoch"] = epoch
@@ -102,7 +113,7 @@ def main(config: GPTConfig):
             logs = defaultdict(list)
             for _ in range(config.test_steps):
                 _, batch = next(dset_test)
-                train_state, log = model.evaluate(train_state, batch)
+                train_state, log = trainer.evaluate(train_state, batch)
                 for k, v in log.items():
                     logs[k].append(v)
             log_dict(writer, logs, step=i, prefix="test/")
@@ -111,8 +122,8 @@ def main(config: GPTConfig):
             for label in range(label_classes):
                 images = []
                 for _ in range(config.generate_samples):
-                    indices, rng = model.generate(
-                        train_state, rng, label, temp=config.sample_temperature
+                    indices, key = trainer.generate(
+                        train_state, key, label, temp=config.sample_temperature
                     )
                     img = decode_indices(vqvae_state, indices)
                     images.append(img[0])
@@ -131,4 +142,4 @@ if __name__ == "__main__":
     with open(args.file, "r") as f:
         config = GPTConfig(**json.load(f))
 
-    main(config)
+    main(config, checkpoint=args.checkpoint)

@@ -11,26 +11,46 @@ from skimage.transform import resize
 from utils.annotations import VqVaeBatch, GPTBatch
 
 
-def process_image(img) -> np.ndarray:
+def process_image(img, shape: tuple[int, int]) -> np.ndarray:
     img = np.array(img, dtype=np.float32) / 255
-    img = resize(img, (32, 32))
+    img = resize(img, shape)
     img = img[..., None]
     return img
 
 
-def load_mnist(split: str,
-               batch_size: int,
-               percentage: int,
-               repeat: bool = True,
-               seed: Optional[int] = None) -> tuple[Features, Iterator[tuple[int, VqVaeBatch]]]:
-    dset = datasets.load_dataset("mnist", split=f"{split}[:{percentage}%]")
+def load_dset(
+        name: str,
+        split: str,
+        batch_size: int,
+        percentage: int,
+        resize_shape: tuple[int, int],
+        repeat: bool = True,
+        seed: Optional[int] = None) -> tuple[Features, Iterator[tuple[int, VqVaeBatch]]]:
+    '''
+    Loads a dataset with preprocessing, batching, and repeating.
+
+    Args:
+        name (str): The name of the dataset on Hugging Face Hub.
+        split (str): The split of the dataset, such as "train" / "test".
+        batch_size (int): The batch size to load the data.
+        percentage (int): The percentage of the dataset to use.
+        resize_shape (tuple[int, int], optional): Shape to resize the image to. 
+        repeat (bool, optional): Whether or not to repeat the dataset after 
+            iterating through one epoch. Defaults to True.
+        seed (Optional[int], optional): The seed used to suffle the dataset. Defaults to None.
+
+    Returns:
+        tuple[Features, Iterator[tuple[int, VqVaeBatch]]]: A tuple of dataset features and the 
+            iterator which yields preprocessed, batched, and repeated data.
+    '''
+    dset = datasets.load_dataset(name, split=f"{split}[:{percentage}%]")
     assert isinstance(dset, Dataset)
 
     features: Features = dset.features
 
     def preprocess(batch) -> VqVaeBatch:
         return {
-            "image": np.array([process_image(img) for img in batch["image"]]),
+            "image": np.array([process_image(img, resize_shape) for img in batch["image"]]),
             "label": np.array(batch["label"])
         }
     dset.set_transform(preprocess)

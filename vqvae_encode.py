@@ -62,7 +62,8 @@ def main(path: str,
         return result, (z1, z2)
 
     def encode(batch):
-        images = np.array([process_image(img) for img in batch["image"]])
+        images = np.array([process_image(img, shape=config.resize_shape)
+                           for img in batch["image"]])
         result, (z1, z2) = infer(vqvae_state, images)
         batch["encoding_indices"] = np.array(result["encoding_indices"])
 

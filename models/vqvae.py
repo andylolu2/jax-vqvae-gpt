@@ -9,17 +9,15 @@ import jax.numpy as jnp
 class ResBlock(hk.Module):
     def __init__(self, dim: int, kernel_size: int, name: Optional[str] = None):
         super().__init__(name)
-        self.conv1 = hk.Conv2D(dim, kernel_size, stride=1)
-        self.batchnorm1 = hk.BatchNorm(True, True, 0.9)
-        self.conv2 = hk.Conv2D(dim, kernel_size, stride=1)
-        self.batchnorm2 = hk.BatchNorm(True, True, 0.9)
+        self.dim = dim
+        self.kernel_size = kernel_size
 
     def __call__(self, x, is_training: bool) -> jnp.ndarray:
-        res = self.conv1(x)
-        res = self.batchnorm1(res, is_training)
+        res = hk.Conv2D(self.dim, self.kernel_size)(x)
+        res = hk.BatchNorm(True, True, 0.9)(res, is_training)
         res = nn.relu(res)
-        res = self.conv2(res)
-        res = self.batchnorm2(res, is_training)
+        res = hk.Conv2D(self.dim, self.kernel_size)(res)
+        res = hk.BatchNorm(True, True, 0.9)(res, is_training)
         x += res
         x = nn.relu(x)
         return x
@@ -31,27 +29,22 @@ class CnnEncoder(hk.Module):
             out_channels: int,
             downscale_level: int,
             res_layers: int = 1,
-            kernel_size: int = 3,
+            kernel_size: int = 5,
             name: Optional[str] = None):
         super().__init__(name)
-        self.downscale_layers = []
-        for i in range(downscale_level - 1, -1, -1):
-            num_channels = out_channels // (2**i)
-            self.downscale_layers.append((
-                hk.Conv2D(num_channels, kernel_size, stride=2),
-                hk.BatchNorm(True, True, 0.9)
-            ))
-        self.res_layers = [
-            ResBlock(out_channels, kernel_size) for _ in range(res_layers)
-        ]
+        self.out_channels = out_channels
+        self.downscale_level = downscale_level
+        self.res_layers = res_layers
+        self.kernel_size = kernel_size
 
     def __call__(self, x, is_training: bool) -> jnp.ndarray:
-        for conv, bn in self.downscale_layers:
-            x = conv(x)
-            x = bn(x, is_training)
+        for i in range(self.downscale_level - 1, -1, -1):
+            num_channels = self.out_channels // (2**i)
+            x = hk.Conv2D(num_channels, self.kernel_size, stride=2)(x)
+            x = hk.BatchNorm(True, True, 0.9)(x, is_training)
             x = nn.relu(x)
-        for res in self.res_layers:
-            x = res(x, is_training)
+            for _ in range(self.res_layers):
+                x = ResBlock(num_channels, self.kernel_size)(x, is_training)
         return x
 
 
@@ -61,31 +54,23 @@ class CnnDecoder(hk.Module):
             in_channels: int,
             upscale_level: int,
             res_layers: int = 1,
-            kernel_size: int = 3,
+            kernel_size: int = 5,
             name: Optional[str] = None):
         super().__init__(name)
-        self.res_layers = [
-            ResBlock(in_channels, kernel_size) for _ in range(res_layers)
-        ]
-        self.upscale_layers = []
-        for i in range(upscale_level - 1):
-            num_channels = in_channels // (2**i)
-            self.upscale_layers.append((
-                hk.Conv2DTranspose(num_channels, kernel_size, stride=2),
-                hk.BatchNorm(True, True, 0.9)
-            ))
-        self.out = hk.Conv2DTranspose(1, kernel_size, stride=2)
-        self.bn_out = hk.BatchNorm(True, True, 0.9)
+        self.in_channels = in_channels
+        self.upscale_level = upscale_level
+        self.res_layers = res_layers
+        self.kernel_size = kernel_size
 
     def __call__(self, x: jnp.ndarray, is_training: bool) -> jnp.ndarray:
-        for res in self.res_layers:
-            x = res(x, is_training)
-        for deconv, bn in self.upscale_layers:
-            x = deconv(x)
-            x = bn(x, is_training)
+        for i in range(self.upscale_level - 1):
+            num_channels = self.in_channels // (2**i)
+            x = hk.Conv2DTranspose(num_channels, self.kernel_size, stride=2)(x)
+            x = hk.BatchNorm(True, True, 0.9)(x, is_training)
             x = nn.relu(x)
-        x = self.out(x)
-        x = self.bn_out(x, is_training)
+            for _ in range(self.res_layers):
+                x = ResBlock(num_channels, self.kernel_size)(x, is_training)
+        x = hk.Conv2DTranspose(1, self.kernel_size, stride=2)(x)
         x = nn.sigmoid(x)
         return x
 
