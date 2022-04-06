@@ -8,10 +8,10 @@ from tqdm import tqdm
 import jax
 import optax
 
-from dataset import load_mnist
 from trainers.vqvae_trainer import VqVaeTrainer
-from logger import get_writer, log_dict
-from annotations import VqVaeConfig
+from utils.dataset import load_mnist
+from utils.logger import get_writer, log_dict
+from utils.annotations import VqVaeConfig
 
 
 def parse_args():

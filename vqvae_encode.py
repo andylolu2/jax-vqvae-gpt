@@ -6,10 +6,10 @@ from pathlib import Path
 import datasets
 import jax
 import numpy as np
-from dataset import process_image
 
 from trainers.vqvae_trainer import VqVaeTrainer
-from annotations import VqVaeConfig, VqVaeState
+from utils.dataset import process_image
+from utils.annotations import VqVaeConfig, VqVaeState
 
 
 def parse_args():

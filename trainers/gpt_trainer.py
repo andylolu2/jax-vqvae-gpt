@@ -9,9 +9,9 @@ import jax
 import optax
 from optax._src.base import GradientTransformation
 
-from annotations import GPTBatch, GPTState, VqVaeConfig
 from models import GPTLmHeadModel
-from losses import cross_entropy
+from utils.annotations import GPTBatch, GPTState, VqVaeConfig
+from utils.losses import cross_entropy
 
 
 class VqVaeGPTTrainer:

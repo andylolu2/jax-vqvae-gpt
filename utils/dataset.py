@@ -8,7 +8,7 @@ import datasets
 from datasets.arrow_dataset import Dataset
 from skimage.transform import resize
 
-from annotations import VqVaeBatch, GPTBatch
+from utils.annotations import VqVaeBatch, GPTBatch
 
 
 def process_image(img) -> np.ndarray:

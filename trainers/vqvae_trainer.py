@@ -7,9 +7,9 @@ import jax.numpy as jnp
 import optax
 from optax._src.base import GradientTransformation
 
-from annotations import VqVaeBatch, VqVaeState
 from models import CnnEncoder, CnnDecoder, QuantizedCodebook
-from losses import mse
+from utils.annotations import VqVaeBatch, VqVaeState
+from utils.losses import mse
 
 
 class VqVaeApply(NamedTuple):

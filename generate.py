@@ -7,7 +7,7 @@ from PIL import Image
 
 import numpy as np
 
-from annotations import GPTBatch, GPTConfig, GPTState, VqVaeConfig, VqVaeState
+from utils.annotations import GPTBatch, GPTConfig, GPTState, VqVaeConfig, VqVaeState
 from trainers.gpt_trainer import VqVaeGPTTrainer
 from trainers.vqvae_trainer import VqVaeTrainer
 

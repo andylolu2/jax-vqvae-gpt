@@ -9,11 +9,11 @@ import optax
 from tqdm import tqdm
 import numpy as np
 
-from dataset import load_vqvae_processed
 from trainers.gpt_trainer import VqVaeGPTTrainer
 from trainers.vqvae_trainer import VqVaeTrainer
-from annotations import GPTConfig, VqVaeConfig, VqVaeState
-from logger import get_writer, log_dict
+from utils.dataset import load_vqvae_processed
+from utils.annotations import GPTConfig, VqVaeConfig, VqVaeState
+from utils.logger import get_writer, log_dict
 
 
 def parse_args():
