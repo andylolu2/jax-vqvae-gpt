@@ -2,8 +2,8 @@ from typing import Any, Callable, NamedTuple, Optional
 import functools
 
 import haiku as hk
-import jax
 import jax.numpy as jnp
+import jax
 import optax
 from optax._src.base import GradientTransformation
 

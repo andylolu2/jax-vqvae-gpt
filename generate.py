@@ -1,10 +1,10 @@
 import argparse
 import json
-from pathlib import Path
 import pickle
-import jax
-from PIL import Image
+from pathlib import Path
 
+from PIL import Image
+import jax
 import numpy as np
 
 from utils.annotations import GPTBatch, GPTConfig, GPTState, VqVaeConfig, VqVaeState

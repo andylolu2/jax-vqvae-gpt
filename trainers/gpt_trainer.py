@@ -2,11 +2,11 @@ from typing import Optional
 import functools
 
 import haiku as hk
-from jax._src.random import KeyArray
 import jax.numpy as jnp
 import jax.nn as nn
 import jax
 import optax
+from jax._src.random import KeyArray
 from optax._src.base import GradientTransformation
 
 from models import GPTLmHeadModel
