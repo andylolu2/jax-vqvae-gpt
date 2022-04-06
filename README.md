@@ -31,7 +31,7 @@ implementation uses a GPT-style, decoder-only transformer to generate samples.
 
 > Generated with 
 > ```terminal
-> python -m generate -p runs/gpt/exp50 -o generated/exp50 -t 0.4 -S 5
+> python -m generate -p runs/gpt/exp0 -o generated/exp0 -t 0.4 -S 5
 
 ## :nut_and_bolt: Run it yourself!
 
