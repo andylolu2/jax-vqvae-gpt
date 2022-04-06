@@ -5,6 +5,7 @@ import haiku as hk
 import jax.numpy as jnp
 import jax
 import optax
+from jax._src.random import KeyArray
 from optax._src.base import GradientTransformation
 
 from models import CnnEncoder, CnnDecoder, QuantizedCodebook
@@ -20,13 +21,14 @@ class VqVaeApply(NamedTuple):
 
 
 class VqVaeTrainer:
-    def __init__(self,
-                 K: int,
-                 D: int,
-                 compression_level: int,
-                 res_layers: int,
-                 commitment_loss: float,
-                 optimizer: Optional[GradientTransformation]):
+    def __init__(
+            self,
+            K: int,
+            D: int,
+            compression_level: int,
+            res_layers: int,
+            commitment_loss: float,
+            optimizer: Optional[GradientTransformation]):
         self.K = K
         self.D = D
         self.compression_level = compression_level
@@ -43,11 +45,12 @@ class VqVaeTrainer:
         self.optimizer = optimizer
 
     @staticmethod
-    def build(K: int,
-              D: int,
-              compression_level: int,
-              res_layers: int,
-              commitment_loss: float):
+    def build(
+            K: int,
+            D: int,
+            compression_level: int,
+            res_layers: int,
+            commitment_loss: float):
         def f():
             encoder = CnnEncoder(out_channels=D,
                                  downscale_level=compression_level,
@@ -83,7 +86,7 @@ class VqVaeTrainer:
             return init, (encode, decode, quantize, embed)
         return hk.multi_transform_with_state(f)
 
-    def initial_state(self, rng, batch: VqVaeBatch) -> VqVaeState:
+    def initial_state(self, rng: KeyArray, batch: VqVaeBatch) -> VqVaeState:
         params, state = self.init(rng, batch["image"], is_training=True)
         opt_state = self.optimizer.init(params)
         return VqVaeState(params, state, opt_state)

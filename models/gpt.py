@@ -16,13 +16,14 @@ class CasualSelfAttention(hk.MultiHeadAttention):
 
 
 class DecoderBlock(hk.Module):
-    def __init__(self,
-                 num_heads: int,
-                 hidden_dim: int,
-                 model_size: int,
-                 weight_init_scale: float,
-                 dropout_rate: float,
-                 name: Optional[str] = None):
+    def __init__(
+            self,
+            num_heads: int,
+            hidden_dim: int,
+            model_size: int,
+            weight_init_scale: float,
+            dropout_rate: float,
+            name: Optional[str] = None):
         super().__init__(name)
         self.casual_atten = CasualSelfAttention(
             num_heads, hidden_dim, weight_init_scale, model_size
@@ -50,14 +51,15 @@ class DecoderBlock(hk.Module):
 
 
 class GPTLmHeadModel(hk.Module):
-    def __init__(self,
-                 num_heads: int,
-                 hidden_dim: int,
-                 num_layers: int,
-                 num_classes: int,
-                 dropout_rate: float,
-                 max_length: int,
-                 name: Optional[str] = None):
+    def __init__(
+            self,
+            num_heads: int,
+            hidden_dim: int,
+            num_layers: int,
+            num_classes: int,
+            dropout_rate: float,
+            max_length: int,
+            name: Optional[str] = None):
         super().__init__(name)
         self.num_heads = num_heads
         self.hidden_dim = hidden_dim

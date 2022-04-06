@@ -15,15 +15,16 @@ from utils.losses import cross_entropy
 
 
 class VqVaeGPTTrainer:
-    def __init__(self,
-                 num_label_classes: int,
-                 vqvae_config: VqVaeConfig,
-                 num_heads: int,
-                 hidden_dim: int,
-                 num_layers: int,
-                 dropout_rate: float,
-                 sample: GPTBatch,
-                 optimizer: Optional[GradientTransformation]):
+    def __init__(
+            self,
+            num_label_classes: int,
+            vqvae_config: VqVaeConfig,
+            num_heads: int,
+            hidden_dim: int,
+            num_layers: int,
+            dropout_rate: float,
+            sample: GPTBatch,
+            optimizer: Optional[GradientTransformation]):
         self.vqvae_config = vqvae_config
         self.num_label_classes = num_label_classes
         self.num_classes = num_label_classes + vqvae_config.K
@@ -42,12 +43,13 @@ class VqVaeGPTTrainer:
         self.optimizer = optimizer
 
     @staticmethod
-    def build(num_heads: int,
-              hidden_dim: int,
-              num_layers: int,
-              num_classes: int,
-              dropout_rate: float,
-              seq_length: int):
+    def build(
+            num_heads: int,
+            hidden_dim: int,
+            num_layers: int,
+            num_classes: int,
+            dropout_rate: float,
+            seq_length: int):
         def init(tokens, is_training: bool):
             net = GPTLmHeadModel(num_heads,
                                  hidden_dim,
@@ -128,7 +130,7 @@ class VqVaeGPTTrainer:
         return new_gpt_state, logs
 
     @functools.partial(jax.jit, static_argnums=0)
-    def generate(self, gpt_state: GPTState, rng, label: int, temp: float = 1):
+    def generate(self, gpt_state: GPTState, rng: KeyArray, label: int, temp: float = 1):
         output_len = self.seq_length - 1
         padded_tokens = [[label] + [0] * output_len]
         tokens = jnp.array(padded_tokens, dtype=jnp.int32)

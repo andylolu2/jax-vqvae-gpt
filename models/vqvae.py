@@ -26,12 +26,13 @@ class ResBlock(hk.Module):
 
 
 class CnnEncoder(hk.Module):
-    def __init__(self,
-                 out_channels: int,
-                 downscale_level: int,
-                 res_layers: int = 1,
-                 kernel_size: int = 3,
-                 name: Optional[str] = None):
+    def __init__(
+            self,
+            out_channels: int,
+            downscale_level: int,
+            res_layers: int = 1,
+            kernel_size: int = 3,
+            name: Optional[str] = None):
         super().__init__(name)
         self.downscale_layers = []
         for i in range(downscale_level - 1, -1, -1):
@@ -55,12 +56,13 @@ class CnnEncoder(hk.Module):
 
 
 class CnnDecoder(hk.Module):
-    def __init__(self,
-                 in_channels: int,
-                 upscale_level: int,
-                 res_layers: int = 1,
-                 kernel_size: int = 3,
-                 name: Optional[str] = None):
+    def __init__(
+            self,
+            in_channels: int,
+            upscale_level: int,
+            res_layers: int = 1,
+            kernel_size: int = 3,
+            name: Optional[str] = None):
         super().__init__(name)
         self.res_layers = [
             ResBlock(in_channels, kernel_size) for _ in range(res_layers)
@@ -89,11 +91,12 @@ class CnnDecoder(hk.Module):
 
 
 class QuantizedCodebook(hk.Module):
-    def __init__(self,
-                 embed_size_K: int,
-                 embed_dim_D: int,
-                 commitment_loss: float,
-                 name: Optional[str] = None):
+    def __init__(
+            self,
+            embed_size_K: int,
+            embed_dim_D: int,
+            commitment_loss: float,
+            name: Optional[str] = None):
         super().__init__(name)
         self.K = embed_size_K
         self.D = embed_dim_D
