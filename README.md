@@ -16,22 +16,33 @@ implementation uses a GPT-style, decoder-only transformer to generate samples.
 
 <div align="center">
 
-<img src="static/images/generated_0.png" width="160"/>
-<img src="static/images/generated_1.png" width="160"/>
-<img src="static/images/generated_2.png" width="160"/>
-<img src="static/images/generated_3.png" width="160"/>
-<img src="static/images/generated_4.png" width="160"/>
-<img src="static/images/generated_5.png" width="160"/>
-<img src="static/images/generated_6.png" width="160"/>
-<img src="static/images/generated_7.png" width="160"/>
-<img src="static/images/generated_8.png" width="160"/>
-<img src="static/images/generated_9.png" width="160"/>
+![Generated 0][0]
+![Generated 1][1]
+![Generated 2][2]
+![Generated 3][3]
+![Generated 4][4]
+![Generated 5][5]
+![Generated 6][6]
+![Generated 7][7]
+![Generated 8][8]
+![Generated 9][9]
+
+[0]: https://user-images.githubusercontent.com/66584117/189109324-6aa57c6b-67dc-49f5-af66-b95701077838.png
+[1]: https://user-images.githubusercontent.com/66584117/189109329-f6bd7549-126b-4d84-90d0-f462e7a46ae8.png
+[2]: https://user-images.githubusercontent.com/66584117/189109331-9a578881-7673-4c09-96a0-98eea1cf7933.png
+[3]: https://user-images.githubusercontent.com/66584117/189109333-d7c699d0-8516-42dc-bf6b-5c94bb0cd476.png
+[4]: https://user-images.githubusercontent.com/66584117/189109335-4c8792a9-ea29-4899-98e1-3669daf4d81d.png
+[5]: https://user-images.githubusercontent.com/66584117/189109337-89083c9f-67fc-46f7-81b9-9629290ce7ec.png
+[6]: https://user-images.githubusercontent.com/66584117/189109340-a7c95498-a828-46ee-9f54-1584010a3542.png
+[7]: https://user-images.githubusercontent.com/66584117/189109344-cda37060-494a-42af-80df-e870bc1c7cfd.png
+[8]: https://user-images.githubusercontent.com/66584117/189109346-e45056e7-0879-412f-8ea9-20f2afb5277c.png
+[9]: https://user-images.githubusercontent.com/66584117/189109348-d02e6300-f351-4b5b-b8fa-3d03465d99bf.png
 
 </div>
 
 > Generated with 
 > ```terminal
-> python -m generate -p runs/gpt/exp0 -o generated/exp0 -t 0.4 -S 5
+> python -m generate -p runs/gpt/exp0 -o generated/exp0 -t 0.5 -S 5
 
 ## :nut_and_bolt: Run it yourself!
 

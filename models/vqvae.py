@@ -128,13 +128,14 @@ class QuantizedCodebook(hk.Module):
 
         # shape A1 x ... x An x D
         quantize = self.codebook[encoding_indices]
-        # straight-through estimator
-        quantize = inputs + jax.lax.stop_gradient(quantize - inputs)
 
         # loss = ||sg[z_e(x)] - e|| + beta||z_e(x) - sg[e]||
         encoding_loss = jnp.mean((jax.lax.stop_gradient(quantize) - inputs)**2)
         commit_loss = jnp.mean((quantize - jax.lax.stop_gradient(inputs))**2)
         loss = encoding_loss + self.beta * commit_loss
+
+        # straight-through estimator for reconstruction loss
+        quantize = inputs + jax.lax.stop_gradient(quantize - inputs)
 
         return {
             "codebook_loss": loss,
