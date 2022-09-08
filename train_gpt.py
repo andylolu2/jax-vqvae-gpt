@@ -19,11 +19,14 @@ from utils.logger import get_writer, log_dict
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Train a GPT-style transformer the VQ-VAE tokens of the MNIST dataset.")
-    parser.add_argument("-f", "--file", type=str, required=True,
-                        help="path to the json config file.")
-    parser.add_argument("-chkp", "--checkpoint", type=str,
-                        help="path to train state pkl file.")
+        description="Train a GPT-style transformer the VQ-VAE tokens of the MNIST dataset."
+    )
+    parser.add_argument(
+        "-f", "--file", type=str, required=True, help="path to the json config file."
+    )
+    parser.add_argument(
+        "-chkp", "--checkpoint", type=str, help="path to train state pkl file."
+    )
     return parser.parse_args()
 
 
@@ -40,13 +43,13 @@ def main(config: GPTConfig, checkpoint: Optional[str] = None):
         path=config.train_dataset,
         batch_size=config.train_batch_size,
         repeat=True,
-        seed=config.seed
+        seed=config.seed,
     )
     _, dset_test = load_vqvae_processed(
         path=config.test_dataset,
         batch_size=config.test_batch_size,
         repeat=True,
-        seed=config.seed
+        seed=config.seed,
     )
     label_classes = features["label"].num_classes
 
@@ -55,30 +58,26 @@ def main(config: GPTConfig, checkpoint: Optional[str] = None):
         vqvae_config = VqVaeConfig(**json.load(f))
     with open(config.vqvae_state, "rb") as f:
         vqvae_state: VqVaeState = pickle.load(f)
-    vqvae = VqVaeTrainer(K=vqvae_config.K,
-                         D=vqvae_config.D,
-                         compression_level=vqvae_config.compression_level,
-                         res_layers=vqvae_config.res_layers,
-                         commitment_loss=vqvae_config.commitment_loss,
-                         optimizer=None)
+    vqvae = VqVaeTrainer(
+        K=vqvae_config.K,
+        D=vqvae_config.D,
+        compression_level=vqvae_config.compression_level,
+        res_layers=vqvae_config.res_layers,
+        commitment_loss=vqvae_config.commitment_loss,
+        optimizer=None,
+    )
 
     @jax.jit
     def decode_indices(vqvae_state: VqVaeState, indices):
         z_q = vqvae.lookup_indices(vqvae_state, indices)
         img, _ = vqvae.apply.decode(
-            vqvae_state.params,
-            vqvae_state.state,
-            None,
-            z_q,
-            is_training=False)
+            vqvae_state.params, vqvae_state.state, None, z_q, is_training=False
+        )
         return img
 
     # initialize model
     _, sample = next(dset_train)
-    optimizer = optax.adamw(
-        config.learning_rate,
-        weight_decay=config.weight_decay
-    )
+    optimizer = optax.adamw(config.learning_rate, weight_decay=config.weight_decay)
     trainer = VqVaeGPTTrainer(
         label_classes,
         vqvae_config,
@@ -87,7 +86,7 @@ def main(config: GPTConfig, checkpoint: Optional[str] = None):
         config.num_layers,
         config.dropout_rate,
         sample,
-        optimizer
+        optimizer,
     )
     key = jax.random.PRNGKey(config.seed)
     if checkpoint is None:

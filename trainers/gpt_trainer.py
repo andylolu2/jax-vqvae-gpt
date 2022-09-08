@@ -16,27 +16,30 @@ from utils.losses import cross_entropy
 
 class VqVaeGPTTrainer:
     def __init__(
-            self,
-            num_label_classes: int,
-            vqvae_config: VqVaeConfig,
-            num_heads: int,
-            hidden_dim: int,
-            num_layers: int,
-            dropout_rate: float,
-            sample: GPTBatch,
-            optimizer: Optional[GradientTransformation]):
+        self,
+        num_label_classes: int,
+        vqvae_config: VqVaeConfig,
+        num_heads: int,
+        hidden_dim: int,
+        num_layers: int,
+        dropout_rate: float,
+        sample: GPTBatch,
+        optimizer: Optional[GradientTransformation],
+    ):
         self.vqvae_config = vqvae_config
         self.num_label_classes = num_label_classes
         self.num_classes = num_label_classes + vqvae_config.K
         self.decoder_input_shape = sample["encoding_indices"].shape[1:]
         self.seq_length = self.tokenize(sample).shape[-1]
 
-        transformed = self.build(num_heads,
-                                 hidden_dim,
-                                 num_layers,
-                                 self.num_classes,
-                                 dropout_rate,
-                                 self.seq_length)
+        transformed = self.build(
+            num_heads,
+            hidden_dim,
+            num_layers,
+            self.num_classes,
+            dropout_rate,
+            self.seq_length,
+        )
         self.init = transformed.init
         self.apply = transformed.apply
 
@@ -44,20 +47,19 @@ class VqVaeGPTTrainer:
 
     @staticmethod
     def build(
-            num_heads: int,
-            hidden_dim: int,
-            num_layers: int,
-            num_classes: int,
-            dropout_rate: float,
-            seq_length: int):
+        num_heads: int,
+        hidden_dim: int,
+        num_layers: int,
+        num_classes: int,
+        dropout_rate: float,
+        seq_length: int,
+    ):
         def init(tokens, is_training: bool):
-            net = GPTLmHeadModel(num_heads,
-                                 hidden_dim,
-                                 num_layers,
-                                 num_classes,
-                                 dropout_rate,
-                                 seq_length)
+            net = GPTLmHeadModel(
+                num_heads, hidden_dim, num_layers, num_classes, dropout_rate, seq_length
+            )
             return net(tokens, is_training)
+
         return hk.transform_with_state(init)
 
     def initial_state(self, rng, batch: GPTBatch) -> GPTState:
@@ -83,8 +85,9 @@ class VqVaeGPTTrainer:
         tokens = jnp.concatenate((labels, vqvae_tokens), axis=-1)
         return tokens
 
-    def forward(self, params: hk.Params, state: hk.State, rng, tokens, is_training: bool
-                ) -> tuple[jnp.ndarray, hk.State]:
+    def forward(
+        self, params: hk.Params, state: hk.State, rng, tokens, is_training: bool
+    ) -> tuple[jnp.ndarray, hk.State]:
         y_pred, state = self.apply(params, state, rng, tokens, is_training)
         return y_pred, state
 
@@ -106,24 +109,22 @@ class VqVaeGPTTrainer:
         (loss, state), grads = loss_and_grad(
             gpt_state.params, gpt_state.state, rng, tokens, True
         )
-        updates, opt_state = self.optimizer.update(grads,
-                                                   gpt_state.opt_state,
-                                                   gpt_state.params)
+        updates, opt_state = self.optimizer.update(
+            grads, gpt_state.opt_state, gpt_state.params
+        )
         params = optax.apply_updates(gpt_state.params, updates)
 
         new_gpt_state = GPTState(params, state, opt_state, rng1)
-        logs = {
-            "scalar_loss": jax.device_get(loss)
-        }
+        logs = {"scalar_loss": jax.device_get(loss)}
         return new_gpt_state, logs
 
     @functools.partial(jax.jit, static_argnums=0)
     def evaluate(self, gpt_state: GPTState, batch: GPTBatch) -> tuple[GPTState, dict]:
         tokens = self.tokenize(batch)
-        loss, state = self.loss(
-            gpt_state.params, gpt_state.state, None, tokens, False)
+        loss, state = self.loss(gpt_state.params, gpt_state.state, None, tokens, False)
         new_gpt_state = GPTState(
-            gpt_state.params, state, gpt_state.opt_state, gpt_state.rng)
+            gpt_state.params, state, gpt_state.opt_state, gpt_state.rng
+        )
         logs = {
             "scalar_loss": jax.device_get(loss),
         }
@@ -142,7 +143,7 @@ class VqVaeGPTTrainer:
             y_pred, _ = self.apply(
                 gpt_state.params, gpt_state.state, None, tokens, False
             )
-            probs = (y_pred[0, i, :] / temp)[self.num_label_classes:]
+            probs = (y_pred[0, i, :] / temp)[self.num_label_classes :]
             probs = nn.softmax(probs)
 
             vqvae_tokens = jnp.arange(

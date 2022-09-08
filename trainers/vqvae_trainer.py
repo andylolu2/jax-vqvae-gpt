@@ -22,23 +22,22 @@ class VqVaeApply(NamedTuple):
 
 class VqVaeTrainer:
     def __init__(
-            self,
-            K: int,
-            D: int,
-            compression_level: int,
-            res_layers: int,
-            commitment_loss: float,
-            optimizer: Optional[GradientTransformation]):
+        self,
+        K: int,
+        D: int,
+        compression_level: int,
+        res_layers: int,
+        commitment_loss: float,
+        optimizer: Optional[GradientTransformation],
+    ):
         self.K = K
         self.D = D
         self.compression_level = compression_level
         self.res_layers = res_layers
 
-        transformed = self.build(self.K,
-                                 self.D,
-                                 self.compression_level,
-                                 self.res_layers,
-                                 commitment_loss)
+        transformed = self.build(
+            self.K, self.D, self.compression_level, self.res_layers, commitment_loss
+        )
         self.init = transformed.init
         self.apply = VqVaeApply(*transformed.apply)
 
@@ -46,23 +45,22 @@ class VqVaeTrainer:
 
     @staticmethod
     def build(
-            K: int,
-            D: int,
-            compression_level: int,
-            res_layers: int,
-            commitment_loss: float):
+        K: int, D: int, compression_level: int, res_layers: int, commitment_loss: float
+    ):
         def f():
-            encoder = CnnEncoder(out_channels=D,
-                                 downscale_level=compression_level,
-                                 res_layers=res_layers,
-                                 name="encoder")
-            decoder = CnnDecoder(in_channels=D,
-                                 upscale_level=compression_level,
-                                 res_layers=res_layers,
-                                 name="decoder")
-            quantizer = QuantizedCodebook(
-                K, D, commitment_loss, name="quantizer"
+            encoder = CnnEncoder(
+                out_channels=D,
+                downscale_level=compression_level,
+                res_layers=res_layers,
+                name="encoder",
             )
+            decoder = CnnDecoder(
+                in_channels=D,
+                upscale_level=compression_level,
+                res_layers=res_layers,
+                name="decoder",
+            )
+            quantizer = QuantizedCodebook(K, D, commitment_loss, name="quantizer")
 
             def encode(x, is_training: bool):
                 return encoder(x, is_training)
@@ -84,6 +82,7 @@ class VqVaeTrainer:
                 return x_pred, z_q
 
             return init, (encode, decode, quantize, embed)
+
         return hk.multi_transform_with_state(f)
 
     def initial_state(self, rng: KeyArray, batch: VqVaeBatch) -> VqVaeState:
@@ -95,12 +94,13 @@ class VqVaeTrainer:
         z_e, state = self.apply.encode(params, state, None, x, is_training)
         result, state = self.apply.quantize(params, state, None, z_e)
         z_q = result["quantize"]
-        x_pred, state = self.apply.decode(
-            params, state, None, z_q, is_training)
+        x_pred, state = self.apply.decode(params, state, None, z_q, is_training)
         result["x_pred"] = x_pred
         return result, state
 
-    def loss(self, params: hk.Params, state: hk.State, batch: VqVaeBatch, is_training: bool):
+    def loss(
+        self, params: hk.Params, state: hk.State, batch: VqVaeBatch, is_training: bool
+    ):
         x = batch["image"]
         result, state = self.forward(params, state, x, is_training)
         reconstruct_loss = mse(x, result["x_pred"])
@@ -108,39 +108,35 @@ class VqVaeTrainer:
         return loss, (state, result)
 
     @functools.partial(jax.jit, static_argnums=0)
-    def update(self, vqvae_state: VqVaeState, batch: VqVaeBatch
-               ) -> tuple[VqVaeState, dict[str, Any]]:
+    def update(
+        self, vqvae_state: VqVaeState, batch: VqVaeBatch
+    ) -> tuple[VqVaeState, dict[str, Any]]:
         assert self.optimizer is not None
 
         loss_and_grad = jax.value_and_grad(self.loss, has_aux=True)
         (loss, (state, _)), grads = loss_and_grad(
             vqvae_state.params, vqvae_state.state, batch, True
         )
-        updates, opt_state = self.optimizer.update(grads,
-                                                   vqvae_state.opt_state,
-                                                   vqvae_state.params)
+        updates, opt_state = self.optimizer.update(
+            grads, vqvae_state.opt_state, vqvae_state.params
+        )
         params = optax.apply_updates(vqvae_state.params, updates)
         new_vqvae_state = VqVaeState(params, state, opt_state)
-        logs = {
-            "scalar_loss": jax.device_get(loss)
-        }
+        logs = {"scalar_loss": jax.device_get(loss)}
         return new_vqvae_state, logs
 
     @functools.partial(jax.jit, static_argnums=0)
     def evaluate(self, vqvae_state: VqVaeState, batch: VqVaeBatch) -> dict[str, Any]:
-        loss, (_, result) = self.loss(vqvae_state.params,
-                                      vqvae_state.state,
-                                      batch,
-                                      is_training=False)
+        loss, (_, result) = self.loss(
+            vqvae_state.params, vqvae_state.state, batch, is_training=False
+        )
         logs = {
             "scalar_loss": jax.device_get(loss),
             "images_original": batch["image"],
-            "images_reconstruction": result["x_pred"]
+            "images_reconstruction": result["x_pred"],
         }
         return logs
 
     def lookup_indices(self, vqvae_state: VqVaeState, indices) -> jnp.ndarray:
-        z_q, _ = self.apply.embed(
-            vqvae_state.params, vqvae_state.state, None, indices
-        )
+        z_q, _ = self.apply.embed(vqvae_state.params, vqvae_state.state, None, indices)
         return z_q
