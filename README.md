@@ -122,7 +122,7 @@ python -m train_gpt -f train_gpt_config.json
 ```
 
 The training script prepends the class label on the sequence of 
-encoding indices which allows of conditional generation 
+encoding indices which allows for conditional generation 
 afterwards.
 
 In another other terminal, open `tensorbaord` to monitor 
