@@ -1,8 +1,8 @@
 from typing import Optional
 
 import haiku as hk
-import jax.numpy as jnp
 import jax.nn as nn
+import jax.numpy as jnp
 
 
 class CasualSelfAttention(hk.MultiHeadAttention):
@@ -27,7 +27,7 @@ class DecoderBlock(hk.Module):
     ):
         super().__init__(name)
         self.casual_atten = CasualSelfAttention(
-            num_heads, hidden_dim, weight_init_scale, model_size
+            num_heads, hidden_dim, weight_init_scale
         )
         self.dropout_rate = dropout_rate
 
